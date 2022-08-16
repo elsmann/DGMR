@@ -174,7 +174,6 @@ class SpatialDiscriminator(snt.Module):
       A tensor with discriminator loss scalars [b].
     """
     b, n, h, w, c = frames.shape.as_list()
-    print(b,n,h,w,c)
 
     # Process each of the n inputs independently.
     frames = tf.reshape(frames, [b * n, h, w, c])

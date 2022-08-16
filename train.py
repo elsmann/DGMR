@@ -9,7 +9,7 @@ import discriminator
 from datetime import datetime
 import load_data
 import os
-
+# directory containing file with Radar data directory
 base_directory= '/Users/frederikesmac/important stuff/Uni/MA/Data/data/RAD_NL25_RAC_5min/'
 
 ###  Training parameters ####
@@ -19,6 +19,8 @@ epochs = 2
 batch_size = 4
 ############
 
+dataset = load_data.create_dataset(base_directory, debugging = debugging_set)
+dataset = dataset.shuffle(buffer_size=1024).batch(batch_size)
 
 def loss_hinge_disc(score_generated, score_real):
   """Discriminator hinge loss."""
@@ -52,9 +54,6 @@ def grid_cell_regularizer(generated_samples, batch_targets):
   return loss
 
 
-dataset = load_data.create_dataset(base_directory, test = debugging_set)
-dataset = dataset.shuffle(buffer_size=1024).batch(batch_size)
-
 generator_optimizer = tf.keras.optimizers.Adam(1e-4)
 discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
 generator_obj = generator.Generator(lead_time=90, time_delta=5)
@@ -78,12 +77,6 @@ def train(epochs, dataset):
 def train_step(frames):
   frames = tf.expand_dims(frames, -1)
   batch_inputs, batch_targets =  tf.split(frames,[4,18], axis = 1)
-  # force to specify batch_size otherwise graph doesn't build
-  #batch_inputs = tf.reshape(batch_inputs,[batch_size,4,256,256,1])
-  #batch_targets = tf.reshape(batch_targets,[batch_size,18,256,256,1])
-  print("inputs and targets:")
-  print(batch_inputs)
-  print(batch_targets)
   # calculate samples and targets for discriminator steps
   batch_predictions = generator_obj(batch_inputs)
   gen_sequence = tf.concat([batch_inputs, batch_predictions], axis=1)

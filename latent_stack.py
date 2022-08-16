@@ -38,7 +38,6 @@ class LatentCondStack(snt.Module):
 
     # L Block to increase the number of channels to 768.
     z = self._lblock4(z)
-    print("returned z from LCS")
 
     return z
 

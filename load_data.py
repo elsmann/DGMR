@@ -10,7 +10,6 @@ import random
 import tensorflow as tf
 
 
-base_directory = '/Users/frederikesmac/important stuff/Uni/MA/Data/data/RAD_NL25_RAC_5min/'
 random.seed(10)
 
 def daterange(start_date, end_date, step):
@@ -64,13 +63,15 @@ def prepare_rad_h5_file(file, upper_row=300, lowest_row=556, left_column=241, ri
         image = np.full([lowest_row-upper_row, right_column-left_column], np.nan)
 
     return image
-def create_dataset(file_directory, test=False):
-    if not test:
+def create_dataset(file_directory, debugging=False):
+    if not debugging:
         years = ["2008", "2009", "2010", "2011", "2012", "2013"]
         months = ["01","02","03","04","05","06","07","08","09","10","11","12"]
+        first_day = 2
     else:
         years = ["2008"]
         months = ["01"]
+        first_day = 29
     upper_row, lowest_row, left_column, right_column = crop_size(file_directory)
     datapoints =[]
     for year in years:
@@ -79,7 +80,7 @@ def create_dataset(file_directory, test=False):
             print("Month ", int(element))
             directory_month = os.path.join(directory_year,element)
             dates = sorted([dt.strftime('%Y%m%d%H%M') for dt in
-                daterange(datetime(int(year), int(element), 2,0,0), datetime(int(year), int(element),  amount_of_days_in_month(int(year),int(element)),23,59),timedelta(minutes=5))])
+                daterange(datetime(int(year), int(element), first_day,0,0), datetime(int(year), int(element),  amount_of_days_in_month(int(year),int(element)),23,59),timedelta(minutes=5))])
             #skip first day of month
             sequence = deque()
             moving_sum = 0
