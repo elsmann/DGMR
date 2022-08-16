@@ -151,4 +151,5 @@ with writer.as_default():
       name="my_func_trace",
       step=0,
       profiler_outdir=logdir)
+
   print("exported writer")
