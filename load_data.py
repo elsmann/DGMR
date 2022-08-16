@@ -8,8 +8,8 @@ import os
 from collections import deque
 import random
 import tensorflow as tf
-
-
+import pickle
+#from tqdm import tqdm
 random.seed(10)
 
 def daterange(start_date, end_date, step):
@@ -63,17 +63,21 @@ def prepare_rad_h5_file(file, upper_row=300, lowest_row=556, left_column=241, ri
         image = np.full([lowest_row-upper_row, right_column-left_column], np.nan)
 
     return image
+
+
 def create_dataset(file_directory, debugging=False):
     if not debugging:
         years = ["2008", "2009", "2010", "2011", "2012", "2013"]
         months = ["01","02","03","04","05","06","07","08","09","10","11","12"]
+        # skip first day of month
         first_day = 2
     else:
         years = ["2008"]
         months = ["01"]
-        first_day = 29
+        first_day = 2
     upper_row, lowest_row, left_column, right_column = crop_size(file_directory)
-    datapoints =[]
+    datapoints =np.empty((717700,22,256,256), dtype=np.float32)
+    index = 0
     for year in years:
         directory_year = os.path.join(file_directory, year)
         for element in months:
@@ -81,7 +85,6 @@ def create_dataset(file_directory, debugging=False):
             directory_month = os.path.join(directory_year,element)
             dates = sorted([dt.strftime('%Y%m%d%H%M') for dt in
                 daterange(datetime(int(year), int(element), first_day,0,0), datetime(int(year), int(element),  amount_of_days_in_month(int(year),int(element)),23,59),timedelta(minutes=5))])
-            #skip first day of month
             sequence = deque()
             moving_sum = 0
             for filename in dates:
@@ -98,17 +101,19 @@ def create_dataset(file_directory, debugging=False):
                         moving_sum = 0
                         sequence.clear()
                     else:
-                        prob = 1 - math.exp(-(moving_sum)/500)
+                        prob = 1 - math.exp(-(moving_sum/500))
                         prob = min(1, prob+ 0.002)
                         if prob > random.random():
                             np_sequence = np.asanyarray(sequence)
-                            datapoints.append(np_sequence)
-
-    datapoints = np.asarray(datapoints)
+                            datapoints[index] = np_sequence
+                            index += 1
+    print("slciing array")
+    datapoints = datapoints[:index]
     print("shape of dataset:", datapoints.shape)
     dataset = tf.data.Dataset.from_tensor_slices(datapoints)
     return dataset
-# save as numpy and then dataset from tensor
-# however docs warn this is waste of memory, use generator instead?
 
+#tf_dataset = create_dataset('/Users/frederikesmac/important stuff/Uni/MA/Data/data/RAD_NL25_RAC_5min/', True)
+#tf_data_path = "/Users/frederikesmac/important stuff/Uni/MA/Data/data/dataset_Jan2018"
+#tf.data.experimental.save( tf_dataset, tf_data_path)
 

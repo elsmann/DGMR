@@ -8,16 +8,27 @@ import generator
 import discriminator
 from datetime import datetime
 import load_data
+import pickle
 import os
 
-base_directory= '/Users/frederikesmac/important stuff/Uni/MA/Data/data/RAD_NL25_RAC_5min/'
-
 ###  Training parameters ####
-debugging_set = True # only creates data for january 2018 instead of whole set
+debugging_set = True # only loads data for January 2018 instead of whole set
 num_samples_per_input = 1 # default 6
 epochs = 2
 batch_size = 4
 ############
+
+# load small debugging datase
+if debugging_set:
+  data_path = "./dataset_Jan"
+  dataset = tf.data.experimental.load(data_path, compression='GZIP')
+
+else:
+  # directory of radar files
+  base_directory = '/Users/frederikesmac/important stuff/Uni/MA/Data/data/RAD_NL25_RAC_5min/'
+  dataset = load_data.create_dataset(base_directory)
+
+dataset = dataset.shuffle(buffer_size=1024).batch(batch_size)
 
 
 def loss_hinge_disc(score_generated, score_real):
@@ -52,8 +63,6 @@ def grid_cell_regularizer(generated_samples, batch_targets):
   return loss
 
 
-dataset = load_data.create_dataset(base_directory, test = debugging_set)
-dataset = dataset.shuffle(buffer_size=1024).batch(batch_size)
 
 generator_optimizer = tf.keras.optimizers.Adam(1e-4)
 discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
