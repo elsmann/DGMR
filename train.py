@@ -31,6 +31,7 @@ else:
 dataset = dataset.shuffle(buffer_size=1024).batch(batch_size)
 
 
+
 def loss_hinge_disc(score_generated, score_real):
   """Discriminator hinge loss."""
   l1 = tf.nn.relu(1. - score_real)
