@@ -8,8 +8,6 @@ import os
 from collections import deque
 import random
 import tensorflow as tf
-import pickle
-#from tqdm import tqdm
 random.seed(10)
 
 def daterange(start_date, end_date, step):
@@ -74,7 +72,7 @@ def create_dataset(file_directory, debugging=False):
     else:
         years = ["2008"]
         months = ["01"]
-        first_day = 2
+        first_day = 29
     upper_row, lowest_row, left_column, right_column = crop_size(file_directory)
     datapoints =np.empty((717700,22,256,256), dtype=np.float32)
     index = 0
@@ -101,19 +99,20 @@ def create_dataset(file_directory, debugging=False):
                         moving_sum = 0
                         sequence.clear()
                     else:
+                        print(moving_sum)
                         prob = 1 - math.exp(-(moving_sum/500))
                         prob = min(1, prob+ 0.002)
                         if prob > random.random():
                             np_sequence = np.asanyarray(sequence)
                             datapoints[index] = np_sequence
                             index += 1
-    print("slciing array")
+
     datapoints = datapoints[:index]
     print("shape of dataset:", datapoints.shape)
     dataset = tf.data.Dataset.from_tensor_slices(datapoints)
     return dataset
 
 #tf_dataset = create_dataset('/Users/frederikesmac/important stuff/Uni/MA/Data/data/RAD_NL25_RAC_5min/', True)
-#tf_data_path = "/Users/frederikesmac/important stuff/Uni/MA/Data/data/dataset_Jan2018"
-#tf.data.experimental.save( tf_dataset, tf_data_path)
+#tf_data_path = "/Users/frederikesmac/important stuff/Uni/MA/Data/data/dataset_31Jan2018"
+#tf.data.experimental.save( tf_dataset, tf_data_path, compression='GZIP')
 
