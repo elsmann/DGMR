@@ -10,7 +10,7 @@ from datetime import datetime
 import load_data
 import os
 
-base_directory= '/Users/frederikesmac/important stuff/Uni/MA/Data/data/RAD_NL25_RAC_5min/'
+base_directory= '/Users/frederikesmac/Uni/MA/Data/data/RAD_NL25_RAC_5min/'
 
 ###  Training parameters ####
 debugging_set = True # only creates data for january 2018 instead of whole set
