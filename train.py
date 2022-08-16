@@ -20,7 +20,7 @@ batch_size = 4
 
 # load small debugging datase
 if debugging_set:
-  data_path = "./dataset_31Jan2018Jan"
+  data_path = "./dataset_31Jan2018"
   dataset = tf.data.experimental.load(data_path, compression='GZIP')
 
 else:
