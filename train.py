@@ -88,12 +88,6 @@ def train(epochs, dataset):
 def train_step(frames):
   frames = tf.expand_dims(frames, -1)
   batch_inputs, batch_targets =  tf.split(frames,[4,18], axis = 1)
-  # force to specify batch_size otherwise graph doesn't build
-  #batch_inputs = tf.reshape(batch_inputs,[batch_size,4,256,256,1])
-  #batch_targets = tf.reshape(batch_targets,[batch_size,18,256,256,1])
-  print("inputs and targets:")
-  print(batch_inputs)
-  print(batch_targets)
   # calculate samples and targets for discriminator steps
   batch_predictions = generator_obj(batch_inputs)
   gen_sequence = tf.concat([batch_inputs, batch_predictions], axis=1)
