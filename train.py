@@ -25,7 +25,7 @@ if debugging_set:
 
 else:
   # directory of radar files
-  base_directory = '/Users/frederikesmac/important stuff/Uni/MA/Data/data/RAD_NL25_RAC_5min/'
+  base_directory = '/Users/frederikesmac/Uni/MA/Data/data/RAD_NL25_RAC_5min/'
   dataset = load_data.create_dataset(base_directory)
 
 dataset = dataset.shuffle(buffer_size=1024).batch(batch_size)
