@@ -3,7 +3,7 @@
 import functools
 import tensorflow as tf
 import sonnet as snt
-import discriminator
+from DGMR import discriminator
 import latent_stack
 import layers
 

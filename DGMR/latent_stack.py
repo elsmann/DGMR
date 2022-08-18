@@ -1,7 +1,6 @@
 import tensorflow as tf
 import functools
 import sonnet as snt
-import numpy as np
 import layers
 
 class LatentCondStack(snt.Module):

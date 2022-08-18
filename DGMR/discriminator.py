@@ -212,10 +212,10 @@ class TemporalDiscriminator(snt.Module):
     # for sonnet
     super().__init__()
     self._block1 = DBlock(output_channels=48, conv=layers.SNConv3D,
-               pooling=layers.downsample_avg_pool3d,
-               pre_activation=False)
+                          pooling=layers.downsample_avg_pool3d,
+                          pre_activation=False)
     self._block2 = DBlock(output_channels=96, conv=layers.SNConv3D,
-               pooling=layers.downsample_avg_pool3d)
+                          pooling=layers.downsample_avg_pool3d)
     self._block3 = DBlock(output_channels=192)
     self._block4 = DBlock(output_channels=384)
     self._block5 = DBlock(output_channels=768)

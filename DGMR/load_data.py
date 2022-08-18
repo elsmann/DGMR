@@ -74,7 +74,7 @@ def create_dataset(file_directory, debugging=False):
         months = ["01"]
         first_day = 29
     upper_row, lowest_row, left_column, right_column = crop_size(file_directory)
-    datapoints =np.empty((717700,22,256,256), dtype=np.float32)
+    datapoints =np.empty((12*24*356*9,22,256,256), dtype=np.float32)
     index = 0
     for year in years:
         directory_year = os.path.join(file_directory, year)
@@ -101,7 +101,7 @@ def create_dataset(file_directory, debugging=False):
                     else:
                         print(moving_sum)
                         prob = 1 - math.exp(-(moving_sum/500))
-                        prob = min(1, prob+ 0.002)
+                        ##prob = min(1, prob+ 0.002)
                         if prob > random.random():
                             np_sequence = np.asanyarray(sequence)
                             datapoints[index] = np_sequence
