@@ -1,24 +1,25 @@
 import tensorflow as tf
 import functools
 import sonnet as snt
-import numpy as np
 
 """Implementation of miscellaneous DL operations.
 
 Implementation of many of the layers can be found in the Sonnet library.
 https://github.com/deepmind/sonnet
+
+Spectral Normalizer layer  from https://github.com/deepmind/sonnet/blob/v2/examples/little_gan_on_mnist.ipynb
 """
 
 
 def downsample_avg_pool(x):
     """Utility function for downsampling by 2x2 average pooling."""
-    # return tf.layers.average_pooling2d(x, 2, 2, data_format='channels_last')
+    # changed from tf.layers.average_pooling2d(x, 2, 2, data_format='channels_last')
     return tf.nn.avg_pool2d(x, 2, 2, padding='VALID', data_format='NHWC')
 
 
 def downsample_avg_pool3d(x):
     """Utility function for downsampling by 2x2 average pooling."""
-    # return tf.layers.average_pooling3d(x, 2, 2, data_format='channels_last')
+    # changed from tf.layers.average_pooling3d(x, 2, 2, data_format='channels_last')
     return tf.nn.avg_pool3d(x, 2, 2, padding='VALID', data_format='NDHWC')
 
 
@@ -83,31 +84,6 @@ class SpectralNormalizer(snt.Module):
         return weights
 
 
-# class SNConv2D(Conv2D):
-#  """2D convolution with spectral normalisation."""
-
-#  def __init__(self, output_channels, kernel_size, stride=1, rate=1,
-#               padding='SAME', sn_eps=0.0001, use_bias=True, name=None, w_init = snt.initializers.Orthogonal(), is_training=True):
-
-#    super().__init__(output_channels,\
-#                    kernel_size= kernel_size, stride = stride, rate = rate, \
-#                    padding=padding, use_bias = use_bias)
-
-#    self.spectral_normalizer = SpectralNormalizer(epsilon= sn_eps)
-
-
-# so I need to add is_trainig to call function?
-
-#  def __call__(self, tensor):
-
-
-# call conv2d with tensor, so it initilaizes weights
-#    super().conv_2D._initialize(tensor)
-
-#    normed_weights= self.spectral_normalizer(super().conv_2D.w, is_training=is_training)
-#    output = tf.matmul(tensor, normed_weights)
-#    return output
-
 class SNConv2D(snt.Module):
     """2D convolution with spectral normalisation."""
 
@@ -117,22 +93,22 @@ class SNConv2D(snt.Module):
         super().__init__(name=name)
         self.conv_2D = snt.Conv2D(output_channels, kernel_shape=kernel_size, \
                                   stride=stride, rate=rate, padding=padding, \
-                                  with_bias=use_bias)
+                                  with_bias=use_bias,  w_init=w_init)
 
         self.spectral_normalizer = SpectralNormalizer(epsilon=sn_eps)
         self.stride = stride
         self.padding = padding
         self.rate = rate
         self.data_format = data_format
-        self.with_bias = use_bias
+        self.use_bias = use_bias
 
     def __call__(self, tensor, is_training=True):
         self.conv_2D._initialize(tensor)
         normed_weights = self.spectral_normalizer(self.conv_2D.w, is_training=is_training)
 
         # output = tf.matmul(tensor, normed_weights)
-        # use confultional instead of matmul bc shapes don't match so it doesnt work
-        # and other keras implementation also uses conv layer for this
+        # use convolutional instead of matmul bc shapes don't match so it doesnt work
+        # other keras implementation also uses conv layer for this
         # change to use sonnet instead of tf conv, need to convert output then though
         #    output = snt.Conv2D(
         #          tensor,
@@ -150,8 +126,7 @@ class SNConv2D(snt.Module):
             dilations=self.rate,
             data_format=self.data_format)
 
-        if self.with_bias:
-            # output = tf.add(output, self.conv_2D.b)
+        if self.use_bias:
             output = tf.nn.bias_add(output, self.conv_2D.b, data_format=self.data_format)
 
         return output
@@ -166,14 +141,14 @@ class SNConv3D(snt.Module):
         super().__init__(name=name)
         self.conv_3D = snt.Conv3D(output_channels, \
                                   kernel_shape=kernel_size, stride=stride, rate=rate, \
-                                  padding=padding, with_bias=use_bias)
+                                  padding=padding, with_bias=use_bias, w_init=w_init)
 
         self.spectral_normalizer = SpectralNormalizer(epsilon=sn_eps)
         self.stride = stride
         self.padding = padding
         self.rate = rate
         self.data_format = data_format
-        self.with_bias = use_bias
+        self.use_bias = use_bias
 
     def __call__(self, tensor, is_training=True):
         self.conv_3D._initialize(tensor)
@@ -187,7 +162,7 @@ class SNConv3D(snt.Module):
             dilations=self.rate,
             data_format=self.data_format)
 
-        if self.with_bias:
+        if self.use_bias:
             output = tf.nn.bias_add(output, self.conv_3D.b, data_format=self.data_format)
         return output
 
@@ -201,11 +176,11 @@ class Linear(snt.Module):
     def __init__(self, output_size, name=None):
         """Constructor."""
         super().__init__(name=name)
-        self.lin = snt.Linear(output_size=output_size)
+        self._ln = snt.Linear(output_size=output_size)
         # not defined with_bias=True, w_init=None, b_init=None
 
     def __call__(self, tensor):
-        output = self.lin(tensor)
+        output = self._ln(tensor)
         return output
 
 
@@ -215,12 +190,12 @@ class BatchNorm(snt.Module):
     def __init__(self, calc_sigma=True):
         """Constructor."""
         super().__init__()
-        self.Batch_Norm = snt.BatchNorm(create_scale=calc_sigma, create_offset=True)
+        self._bn = snt.BatchNorm(create_scale=calc_sigma, create_offset=True)
         # not defined  decay_rate=0.999, eps=1e-05, scale_init=None, offset_init=None, \
         # data_format='channels_last'
 
     def __call__(self, tensor, is_training=True):
-        output = self.Batch_Norm(tensor, is_training=True)
+        output = self._bn(tensor, is_training=True)
         return output
 
 
@@ -233,6 +208,9 @@ class ApplyAlongAxis:
         self._axis = axis
 
     def __call__(self, inputs):
+        # apperently lsit comprehension not needed
+        # split_inputs = [tf.unstack(arg, axis=self._axis) for arg in args]
+        #  res = [self._operation(x) for x in zip(*split_inputs)]
         split_inputs = tf.unstack(inputs, axis=self._axis)
         res = [self._operation(x) for x in split_inputs]
         return tf.stack(res, axis=self._axis)
@@ -247,8 +225,7 @@ class ApplyAlongAxis_org:
 
     def __call__(self, *args):
         """Apply the operation to each element of args along the specified axis."""
-        split_inputs = [tf.unstack(arg, axis=self._axis) for arg in args]
-        res = [self._operation(x) for x in zip(*split_inputs)]
+
         return tf.stack(res, axis=self._axis)
 
 

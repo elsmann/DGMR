@@ -3,7 +3,7 @@
 import functools
 import tensorflow as tf
 import sonnet as snt
-from DGMR import discriminator
+import discriminator
 import latent_stack
 import layers
 
@@ -133,10 +133,8 @@ class Sampler(snt.Module):
     hs = [z] * self._num_predictions
 
     # Layer 4 (bottom-most).
-    # why can we change this to this?
-    # hs, _ = tf.nn.static_rnn(self._conv_gru4, hs, init_state_4)
+    #tf.nn.static_rnn() deprecated in TF2, so changed to sonnet implementation
     hs = tf.stack(hs)
-    # this takes 20 seconds
     hs, _ = snt.static_unroll(self._conv_gru4, hs, init_state_4)
     hs = tf.unstack(hs)
     hs = [self._conv4(h) for h in hs]
@@ -144,7 +142,6 @@ class Sampler(snt.Module):
     hs = [self._g_up_block4(h) for h in hs]
 
     # Layer 3.
-    # hs, _ = tf.nn.static_rnn(self._conv_gru3, hs, init_state_3)
     hs = tf.stack(hs)
     hs, _ = snt.static_unroll(self._conv_gru3, hs, init_state_3)
     hs = tf.unstack(hs)
@@ -153,8 +150,6 @@ class Sampler(snt.Module):
     hs = [self._g_up_block3(h) for h in hs]
 
     # Layer 2.
-    # hs, _ = tf.nn.static_rnn(self._conv_gru2, hs, init_state_2)
-
     hs = tf.stack(hs)
     hs, _ = snt.static_unroll(self._conv_gru2, hs, init_state_2)
     hs = tf.unstack(hs)
@@ -166,7 +161,6 @@ class Sampler(snt.Module):
     hs = tf.stack(hs)
     hs, _ = snt.static_unroll(self._conv_gru1, hs, init_state_1)
     hs = tf.unstack(hs)
-    # hs, _ = tf.nn.static_rnn(self._conv_gru1, hs, init_state_1)
     hs = [self._conv1(h) for h in hs]
     hs = [self._gblock1(h) for h in hs]
     hs = [self._g_up_block1(h) for h in hs]
@@ -279,6 +273,7 @@ class ConvGRU(snt.Module):
 
     # Concatenate the inputs and previous state along the channel axis.
     num_channels = prev_state.shape[-1]
+
     xh = tf.concat([inputs, prev_state], axis=-1)
 
     # Read gate of the GRU.

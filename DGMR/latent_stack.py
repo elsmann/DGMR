@@ -1,3 +1,5 @@
+"""Latent Conditioning Stack."""
+
 import tensorflow as tf
 import functools
 import sonnet as snt
@@ -10,7 +12,6 @@ class LatentCondStack(snt.Module):
     # for sonnet
     super().__init__()
 
-
     self._conv1 = layers.SNConv2D(output_channels=8, kernel_size=3)
     self._lblock1 = LBlock(output_channels=24, input_channels = 8)
     self._lblock2 = LBlock(output_channels=48, input_channels = 24)
@@ -22,6 +23,7 @@ class LatentCondStack(snt.Module):
 
     # Independent draws from a Normal distribution.
     h, w = resolution[0] // 32, resolution[1] // 32
+    # TODO increase deviation from default 1 to 2 when predicting?
     z = tf.random.normal([batch_size, h, w, 8])
 
     # 3x3 convolution.
@@ -132,14 +134,8 @@ class Attention(snt.Module):
     self._conv1 = conv(output_channels=self._num_channels,
       kernel_size=1, padding='VALID', use_bias=False)
 
-    # Learnable gain parameter
-    # self._gamma = tf.get_variable(
-    #   'miniattn_gamma', shape=[],
-    #  initializer=tf.initializers.zeros(tf.float32))
-
     # TF 2 alternative
     self._gammainitializer = tf.zeros([], dtype=tf.dtypes.float32)
-    #self._gamma = tf.Variable(self._gammainitializer, name='miniattn_gamma', shape=[])
     if not hasattr(self, "_gamma"):  # Or set self.v to None in __init__
       self._gamma = tf.Variable(self._gammainitializer, name='_gamma', shape=[])
 
