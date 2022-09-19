@@ -24,9 +24,10 @@ print("------Import successful------")
 base_directory =  pathlib.Path(sys.argv[1])
 year = sys.argv[2]
 tf.config.run_functions_eagerly(False)
-if sys.argv[3] == "eager":
-  tf.config.run_functions_eagerly(True)
-  print("Running with eager execution")
+if  len(sys.argv) > 2:
+  if sys.argv[3] == "eager":
+    tf.config.run_functions_eagerly(True)
+    print("Running with eager execution")
 else: print("Running with graph execution")
 
 num_samples_per_input = 2 # default 6
