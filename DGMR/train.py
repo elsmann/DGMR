@@ -126,10 +126,11 @@ class DGMR():
       grid_cell_reg = grid_cell_regularizer(tf.stack(gen_samples, axis=0),
                                             batch_targets)
       gen_sequences = [tf.concat([batch_inputs, x], axis=1) for x in gen_samples]
-      # this doesn't make sense, shouldn't we sum over the prediction of the discriminator?
-      # so call disc from every sample in gen_samples and then call loss_hing_gen of outputs
-      gen_disc_loss = loss_hinge_gen(tf.concat(gen_sequences, axis=0))
-      ###
+      # Excpect error in pseudocode:
+      #  gen_disc_loss = loss_hinge_gen(tf.concat(gen_sequences, axis=0))
+      #changed to call discriminator on gen_sequence and caluculate loss on this output
+      disc_output = [self._discriminator(x) for x in gen_sequences]
+      gen_disc_loss = loss_hinge_gen(tf.concat(disc_output, axis=0))
       gen_loss = gen_disc_loss + 20.0 * grid_cell_reg
       print("GEN_loss", gen_loss)
       tf.print("gen_loss", gen_loss)
