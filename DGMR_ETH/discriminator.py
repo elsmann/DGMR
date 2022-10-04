@@ -1,5 +1,4 @@
 """Discriminator implementation."""
-
 import tensorflow as tf
 import sonnet as snt
 import layers
@@ -35,7 +34,6 @@ class Discriminator(snt.Module):
       A tensor with discriminator loss scalars [b, 2].
     """
     b, t, h, w, c = frames.shape.as_list()
-
 
     # Prepare the frames for spatial discriminator: pick 8 random time steps out
     # of 18 lead time steps, and downsample from 256x256 to 128x128.
@@ -123,10 +121,9 @@ class DBlock(snt.Module):
     if self._pre_activation:
       h0 = self._activation(h0)
 
-
     # First convolution.
     input_channels = h0.shape.as_list()[-1]
-    # changed num_channels to output_channels instead of input_channels
+    # changed num_channels to output_channels
     h1 = self._conv1(h0)
     h1 = self._activation(h1)
 
@@ -165,7 +162,7 @@ class SpatialDiscriminator(snt.Module):
     self._block6 = DBlock(output_channels=768, downsample=False)
 
     self._bn = layers.BatchNorm(calc_sigma=False)
-    self._ln = layers.Linear(output_size=1)
+    self._linear = layers.Linear(output_size=1)
 
   def __call__(self, frames):
     """Build the spatial discriminator.
@@ -194,11 +191,12 @@ class SpatialDiscriminator(snt.Module):
 
     # One more D Block without downsampling or increase in number of channels.
     y = self._block6(y)
+
     # Sum-pool the representations and feed to spectrally normalized lin. layer.
     y = tf.reduce_sum(tf.nn.relu(y), axis=[1, 2])
     y = self._bn(y)
     # TODO shouldn't this be spectrally normalized?
-    output = self._ln(y)
+    output = self._linear(y)
 
     # Take the sum across the t samples. Note: we apply the ReLU to
     # (1 - score_real) and (1 + score_generated) in the loss.
@@ -223,11 +221,10 @@ class TemporalDiscriminator(snt.Module):
     self._block5 = DBlock(output_channels=768)
     self._block6 = DBlock(output_channels=768, downsample=False)
     self._bn = layers.BatchNorm(calc_sigma=False)
-    self._ln = layers.Linear(output_size=1)
+    self._linear = layers.Linear(output_size=1)
 
   def __call__(self, frames):
     """Build the temporal discriminator.
-
 
     Args:
       frames: a tensor with a complete observation [b, ts, 128, 128, 1]
@@ -240,12 +237,12 @@ class TemporalDiscriminator(snt.Module):
 
     # Process each of the ti inputs independently.
     frames = tf.reshape(frames, [b * ts, hs, ws, cs])
+
     # Space-to-depth stacking from 128x128x1 to 64x64x4.
     frames = tf.nn.space_to_depth(frames, block_size=2)
 
     # Stack back to sequences of length ti.
-    # Changed from tf.reshape(frames, [b, ts, hs, ws, cs]) to stay true to paper description
-    frames = tf.reshape(frames, [b, ts, hs//2, ws//2, cs*4])
+    frames = tf.reshape(frames, [b, ts, hs, ws, cs])
 
     # Two residual 3D Blocks to halve the resolution of the image, double
     # the number of channels, and reduce the number of time steps.
@@ -270,11 +267,10 @@ class TemporalDiscriminator(snt.Module):
     # Sum-pool the representations and feed to spectrally normalized lin. layer.
     y = tf.reduce_sum(tf.nn.relu(y), axis=[1, 2])
     y = self._bn(y)
-    output = self._ln(y)
+    output = self._linear(y)
 
     # Take the sum across the t samples. Note: we apply the ReLU to
     # (1 - score_real) and (1 + score_generated) in the loss.
     output = tf.reshape(output, [b, t, 1])
     scores = tf.reduce_sum(output, keepdims=True, axis=1)
-
     return scores

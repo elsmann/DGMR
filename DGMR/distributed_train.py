@@ -19,6 +19,7 @@ from datetime import datetime
 import numpy as np
 
 print("------Import successful------")
+print("------Scratch------")
 
 ###  Training parameters ####
 base_directory =  pathlib.Path(sys.argv[1])
@@ -33,7 +34,7 @@ else: print("Running with graph execution")
 
 num_samples_per_input = 2 # default 6
 epochs = 1
-BATCH_SIZE = 4
+BATCH_SIZE = 1
 mirrored_strategy = tf.distribute.MirroredStrategy()
 
 ############
@@ -45,13 +46,6 @@ print("{} Epochs \n{} Samples per Input\n"
 print("----------------------------------")
 
 
-def loss_hinge_disc(score_generated, score_real):
-  """Discriminator hinge loss."""
-  l1 = tf.nn.relu(1. - score_real)
-  loss = tf.reduce_mean(l1)
-  l2 = tf.nn.relu(1. + score_generated)
-  loss += tf.reduce_mean(l2)
-  return loss
 
 def loss_hinge_disc_dist(score_generated, score_real):
   """Discriminator hinge loss."""
@@ -62,34 +56,10 @@ def loss_hinge_disc_dist(score_generated, score_real):
   loss +=  tf.reduce_sum(l2) * (1. / (BATCH_SIZE*2))
   return loss
 
-def loss_hinge_gen(score_generated):
-  """Generator hinge loss."""
-  loss = -tf.reduce_mean(score_generated)
-  return loss
 
 def loss_hinge_gen_dist(score_generated):
   """Generator hinge loss."""
   loss = -tf.reduce_sum(score_generated) *(1. / (BATCH_SIZE*2*num_samples_per_input))
-  return loss
-
-def grid_cell_regularizer(generated_samples, batch_targets):
-  """Grid cell regularizer.
-
-  Args:
-    generated_samples: Tensor of size [n_samples, batch_size, 18, 256, 256, 1].
-    batch_targets: Tensor of size [batch_size, 18, 256, 256, 1].
-
-  Returns:
-    loss: A tensor of shape [batch_size].
-  """
-  #print("generte smaples", generated_samples)
-  gen_mean = tf.reduce_mean(generated_samples, axis=0)
-  #print("gen mean", gen_mean)
-  # TODO check why clip at 24? maybe not relaistic to have higher cells
-  weights = tf.clip_by_value(batch_targets, 0.0, 24.0)
-  loss = tf.reduce_mean(tf.math.abs(gen_mean - batch_targets) * weights)
-  #print("math", tf.math.abs(gen_mean - batch_targets)) #  shape=(3, 18, 256, 256, 1)
-  #print("math and weights", tf.math.abs(gen_mean - batch_targets) * weights)
   return loss
 
 def grid_cell_regularizer_dist(generated_samples, batch_targets):
@@ -102,9 +72,7 @@ def grid_cell_regularizer_dist(generated_samples, batch_targets):
   Returns:
     loss: A tensor of shape [batch_size].
   """
- # print("dist generte smaples ", generated_samples)
   gen_mean = tf.reduce_mean(generated_samples, axis=0)
-  #print("dist gen mean", gen_mean)
   # TODO check why clip at 24? maybe not relaistic to have higher cells
   weights = tf.clip_by_value(batch_targets, 0.0, 24.0)
   loss = tf.reduce_mean(tf.math.abs(gen_mean - batch_targets) * weights,axis=list(range(1, len(batch_targets.shape))) )
@@ -116,31 +84,27 @@ def grid_cell_regularizer_dist(generated_samples, batch_targets):
 class DGMR():
 
   def __init__(self,
-               generator_obj = generator.Generator(lead_time=90, time_delta=5),
+               generator_obj = generator.Generator(lead_time=90, time_delta=5, strategy = mirrored_strategy),
                 discriminator_obj = discriminator.Discriminator(),
                 generator_optimizer = tf.keras.optimizers.Adam(1e-4),
                 discriminator_optimizer = tf.keras.optimizers.Adam(1e-4),
                 epochs = 3):
-
     self._generator = generator_obj
     self._discriminator = discriminator_obj
     self._gen_op = generator_optimizer
     self._disc_op = discriminator_optimizer
     self._epochs = epochs
+    print("in scope")
+    print(mirrored_strategy.extended.variable_created_in_scope(self._generator._sampler._latent_stack._mini_atten_block._gamma))
 
   @tf.function
   def distributed_train_step(self, dataset_inputs):
     per_replica_losses = mirrored_strategy.run(self.train_step, args=(dataset_inputs,))
-    return mirrored_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,
-                           axis=None)
+    #return mirrored_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,
+     #                      axis=None)
 
   def run(self, dataset):
 
-    #stamp = datetime.now().strftime("%m%d-%H%M")
-    #logdir = log_dir + "/func/%s" % stamp
-    #writer = tf.summary.create_file_writer(logdir)
-    #tf.profiler.experimental.start(logdir)
-    #tf.summary.trace_on(graph=True)
 
     for epoch in range(self._epochs):
       print("Epoch:", epoch)
@@ -148,19 +112,17 @@ class DGMR():
         tf.print(step, "step")
         print("Step:", step)
         self.distributed_train_step(frames)
-        if step == 10:
+        if step == 0:
           break
 
-    #with writer.as_default():
-    #  tf.summary.trace_export(
-    #    name="my_func_trace",
-    #    step=0,
-    #    profiler_outdir=logdir)
-
-    #tf.profiler.experimental.stop(save=True)
 
   def train_step(self, frames):
     print("Dimension of frames", frames.shape)
+   # with writer.as_default():
+   #   images = np.reshape(frames, (22,256,256,1))
+   #   print(images.shape)
+   #   tf.summary.image("Training data", images, max_outputs=25, step=0)
+   # return
     frames = tf.expand_dims(frames, -1)
     batch_inputs, batch_targets = tf.split(frames, [4, 18], axis=1)
     # TODO now it is trained twice on the same data batch, is that correct?
@@ -187,29 +149,41 @@ class DGMR():
       gen_samples = [
         self._generator(batch_inputs) for _ in range(num_samples_per_input)]
       grid_cell_reg_dist = grid_cell_regularizer_dist(tf.stack(gen_samples, axis=0),
-                                            batch_targets)
-      gen_sequences = [tf.concat([batch_inputs, x], axis=1) for x in gen_samples] # from here on numpys as tf tensors
-     # print("gen seq", gen_sequences)
+                                                      batch_targets)
+      gen_sequences = [tf.concat([batch_inputs, x], axis=1) for x in gen_samples]  # from here on numpys as tf tensors
+      # print("gen seq", gen_sequences)
       # Excpect error in pseudocode:
       #  gen_disc_loss = loss_hinge_gen(tf.concat(gen_sequences, axis=0))
-      #changed to call discriminator on gen_sequence and caluculate loss on this output
+      # changed to call discriminator on gen_sequence and caluculate loss on this output
       disc_output = [self._discriminator(x) for x in gen_sequences]
       gen_disc_loss_dist = loss_hinge_gen_dist(tf.concat(disc_output, axis=0))
       gen_loss = gen_disc_loss_dist + 20.0 * grid_cell_reg_dist
       print("GEN_loss", gen_loss)
       tf.print("gen_loss", gen_loss)
-    gradients_of_generator = gen_tape.gradient(gen_loss,  self._generator.trainable_variables)
-    self._gen_op.apply_gradients(zip(gradients_of_generator,  self._generator.trainable_variables))
+    gradients_of_generator = gen_tape.gradient(gen_loss, self._generator.trainable_variables)
+    self._gen_op.apply_gradients(zip(gradients_of_generator, self._generator.trainable_variables))
 
-
+   # return disc_loss_dist
 dataset = reading_data.read_TFR(base_directory, year=year, batch_size=BATCH_SIZE)
-dist_dataset = mirrored_strategy.experimental_distribute_dataset(dataset)
+dataset = mirrored_strategy.experimental_distribute_dataset(dataset)
+
+stamp = datetime.now().strftime("%m%d-%H%M")
+logdir = log_dir + "/func/%s" % stamp
+writer = tf.summary.create_file_writer(logdir)
+tf.profiler.experimental.start(logdir)
+#tf.summary.trace_on(graph=True)
+tf.summary.trace_on(graph=False)
 
 with mirrored_strategy.scope():
   model = DGMR(epochs=epochs)
   model.run(dataset=dataset)
 
+with writer.as_default():
+  tf.summary.trace_export(
+    name="my_func_trace",
+    step=0,
+    profiler_outdir=logdir)
 
- # TODO add eraly stopping
+tf.profiler.experimental.stop(save=True)
 
 
