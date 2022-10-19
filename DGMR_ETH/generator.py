@@ -11,7 +11,7 @@ import layers
 class Generator(snt.Module):
   """Generator for the proposed model."""
 
-  def __init__(self, lead_time=90, time_delta=5):
+  def __init__(self, lead_time=90, time_delta=5,  strategy = None):
     """Constructor.
 
     Args:
@@ -22,7 +22,7 @@ class Generator(snt.Module):
     super().__init__()
 
     self._cond_stack = ConditioningStack()
-    self._sampler = Sampler(lead_time, time_delta)
+    self._sampler = Sampler(lead_time, time_delta,  strategy=strategy)
 
   def __call__(self, radar_inputs, eth_inputs):
     """Connect to a graph.
@@ -119,12 +119,12 @@ class ConditioningStack(snt.Module):
 class Sampler(snt.Module):
   """Sampler for the Generator."""
 
-  def __init__(self, lead_time=90, time_delta=5):
+  def __init__(self, lead_time=90, time_delta=5, strategy = None):
     # for sonnet
     super().__init__()
 
     self._num_predictions = lead_time // time_delta
-    self._latent_stack = latent_stack.LatentCondStack()
+    self._latent_stack = latent_stack.LatentCondStack(strategy=strategy)
 
     self._conv_gru4 = ConvGRU(num_channels=384*2)
     self._conv4 = layers.SNConv2D(kernel_size=1, output_channels=768)

@@ -6,7 +6,7 @@ import layers
 class LatentCondStack(snt.Module):
   """Latent Conditioning Stack for the Sampler."""
 
-  def __init__(self, gamma = None):
+  def __init__(self, strategy = None, gamma = None):
     # for sonnet
     super().__init__()
 
@@ -15,7 +15,7 @@ class LatentCondStack(snt.Module):
     self._lblock1 = LBlock(output_channels=24, input_channels = 8)
     self._lblock2 = LBlock(output_channels=48, input_channels = 24)
     self._lblock3 = LBlock(output_channels=192, input_channels = 48)
-    self._mini_atten_block = Attention(num_channels=192)
+    self._mini_atten_block = Attention(num_channels=192, strategy= strategy)
     self._lblock4 = LBlock(output_channels=768, input_channels = 192)
 
   def __call__(self, batch_size, resolution=(256, 256)):
@@ -115,7 +115,7 @@ def attention_einsum(q, k, v):
 class Attention(snt.Module):
   """Attention module."""
 
-  def __init__(self, num_channels, ratio_kq=8, ratio_v=8, conv=layers.Conv2D):
+  def __init__(self, num_channels, strategy=None, ratio_kq=8, ratio_v=8, conv=layers.Conv2D):
     """Constructor."""
     # for sonnet
     super().__init__()
@@ -138,10 +138,18 @@ class Attention(snt.Module):
     #  initializer=tf.initializers.zeros(tf.float32))
 
     # TF 2 alternative
-    self._gammainitializer = tf.zeros([], dtype=tf.dtypes.float32)
-    #self._gamma = tf.Variable(self._gammainitializer, name='miniattn_gamma', shape=[])
-    if not hasattr(self, "_gamma"):  # Or set self.v to None in __init__
-      self._gamma = tf.Variable(self._gammainitializer, name='_gamma', shape=[])
+    if strategy is not None:
+      with strategy.scope():
+        self._gammainitializer = tf.zeros([], dtype=tf.dtypes.float32)
+        #self._gamma = tf.Variable(self._gammainitializer, name='miniattn_gamma', shape=[])
+        if not hasattr(self, "_gamma"):  # Or set self.v to None in __init__
+          self._gamma = tf.Variable(self._gammainitializer, name='_gamma', shape=[])
+    else:
+      print("no strategy for gamma")
+      self._gammainitializer = tf.zeros([], dtype=tf.dtypes.float32)
+      if not hasattr(self, "_gamma"):  # Or set self.v to None in __init__
+        self._gamma = tf.Variable(self._gammainitializer, name='_gamma', shape=[])
+
 
   def __call__(self, tensor):
     # Compute query, key and value using 1x1 convolutions.

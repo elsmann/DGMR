@@ -58,7 +58,7 @@ def prepare_rad_h5_file(file, upper_row=300, lowest_row=556, left_column=241, ri
     image = image[upper_row:lowest_row, left_column:right_column]
     image = np.where( image == 65535, np.NaN, image / 100.0 )
     image_sum = np.sum(image)
-    print(image_sum)
+    #print(image_sum)
     return image, image_sum
 
 def _bytes_feature(value):

@@ -126,7 +126,7 @@ class DBlock(snt.Module):
 
     # First convolution.
     input_channels = h0.shape.as_list()[-1]
-    # changed num_channels to output_channels instead of input_channels
+    # TODO changed num_channels to output_channels instead of input_channels
     h1 = self._conv1(h0)
     h1 = self._activation(h1)
 
@@ -270,6 +270,7 @@ class TemporalDiscriminator(snt.Module):
     # Sum-pool the representations and feed to spectrally normalized lin. layer.
     y = tf.reduce_sum(tf.nn.relu(y), axis=[1, 2])
     y = self._bn(y)
+    # TODO shouldn't it be spec. normalized?
     output = self._ln(y)
 
     # Take the sum across the t samples. Note: we apply the ReLU to

@@ -23,7 +23,7 @@ class LatentCondStack(snt.Module):
 
     # Independent draws from a Normal distribution.
     h, w = resolution[0] // 32, resolution[1] // 32
-    # TODO increase deviation from default 1 to 2 when predicting?
+    # TODO increase deviation from default 1 to 2 when predicting
     z = tf.random.normal([batch_size, h, w, 8])
 
     # 3x3 convolution.
@@ -139,12 +139,12 @@ class Attention(snt.Module):
       print("strategy for gamme", strategy)
       with strategy.scope():
         self._gammainitializer = tf.zeros([], dtype=tf.dtypes.float32)
-        if not hasattr(self, "_gamma"):  # Or set self.v to None in __init__
+        if not hasattr(self, "_gamma"):
           self._gamma = tf.Variable(self._gammainitializer, name='_gamma', shape=[])
     else:
       print("no strategy for gamma")
       self._gammainitializer = tf.zeros([], dtype=tf.dtypes.float32)
-      if not hasattr(self, "_gamma"):  # Or set self.v to None in __init__
+      if not hasattr(self, "_gamma"):
         self._gamma = tf.Variable(self._gammainitializer, name='_gamma', shape=[])
 
 
@@ -156,9 +156,8 @@ class Attention(snt.Module):
 
     # Apply the attention operation.
     # out = ApplyAlongAxis_org(attention_einsum, axis=0)(query, key, value)
-    # figure out why functools in needed
+    # TODO figure out if correct
     out = layers.ApplyAlongAxis(functools.partial(attention_einsum, k=key, v=value), axis=0)(query)
-
     out = self._gamma * self._conv1(out)
 
     # Residual connection.

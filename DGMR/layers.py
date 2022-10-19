@@ -107,7 +107,7 @@ class SNConv2D(snt.Module):
         normed_weights = self.spectral_normalizer(self.conv_2D.w, is_training=is_training)
 
         # output = tf.matmul(tensor, normed_weights)
-        # use convolutional instead of matmul bc shapes don't match so it doesnt work
+        # TODO used convolutional instead of matmul bc shapes don't match so it doesnt work
         # other keras implementation also uses conv layer for this
         # change to use sonnet instead of tf conv, need to convert output then though
         #    output = snt.Conv2D(
@@ -225,6 +225,8 @@ class ApplyAlongAxis_org:
 
     def __call__(self, *args):
         """Apply the operation to each element of args along the specified axis."""
+        split_inputs = [tf.unstack(arg, axis=self._axis) for arg in args]
+        res = [self._operation(x) for x in zip(*split_inputs)]
 
         return tf.stack(res, axis=self._axis)
 

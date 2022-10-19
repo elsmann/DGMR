@@ -123,7 +123,7 @@ class Sampler(snt.Module):
     self._output_conv = layers.SNConv2D(kernel_size=1, output_channels=4)
 
   def __call__(self, initial_states, resolution):
-    # intial states are float64 for some reasom
+    # intial states are float64 for some reason #TODO check if still true
 
     init_state_1, init_state_2, init_state_3, init_state_4 = initial_states
     batch_size = init_state_1.shape.as_list()[0]
@@ -272,7 +272,7 @@ class ConvGRU(snt.Module):
   def __call__(self, inputs, prev_state):
 
     # Concatenate the inputs and previous state along the channel axis.
-    num_channels = prev_state.shape[-1]
+    num_channels = prev_state.shape[-1] # TODO can be delete
 
     xh = tf.concat([inputs, prev_state], axis=-1)
 
