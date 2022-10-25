@@ -38,9 +38,10 @@ else:
   print("Running with graph execution")
 
 num_samples_per_input = 2 # default 6
-epochs = 1
-BATCH_SIZE = 2
-steps_per_epoch = 5000
+epochs = 2
+BATCH_SIZE = 16
+steps_per_epoch = 70000
+eval_step = 100
 year = None
 
 ############
@@ -116,18 +117,19 @@ class DGMR():
         data = dist_iterator.get_next_as_optional()
         if not data.has_value():
           break
-        self.distributed_train_step(data.get_value())
-        if step %50 == 0:
+        self.distributed_train_step(data.get_value(), step)
+
+        if step % eval_step == 0:
           self.eval(next(test_iterator), idx)
           idx+=1
 
   @tf.function
-  def distributed_train_step(self, dataset_inputs):
-    per_replica_losses = mirrored_strategy.run(self.train_step, args=(dataset_inputs,))
+  def distributed_train_step(self, dataset_inputs, step):
+    per_replica_losses = mirrored_strategy.run(self.train_step, args=(dataset_inputs, step))
     #return mirrored_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
 
 
-  def train_step(self, frames):
+  def train_step(self, frames, step):
     frames = tf.expand_dims(frames, -1)
     batch_inputs, batch_targets = tf.split(frames, [4, 18], axis=1)
     # TODO now it is trained twice on the same data batch
@@ -145,29 +147,30 @@ class DGMR():
         print("score real", score_real, "score generated", score_generated)
         disc_loss_dist = loss_hinge_disc_dist(score_generated, score_real)
         with writer.as_default():
-          tf.summary.scalar('disc loss', data=disc_loss_dist, step =0)
+          tf.summary.scalar('disc loss', data=disc_loss_dist, step =tf.cast(step, tf.int64))
         tf.print("disc_loss", disc_loss_dist)
       gradients_of_discriminator = disc_tape.gradient(disc_loss_dist, self._discriminator.trainable_variables)
       self._disc_op.apply_gradients(zip(gradients_of_discriminator, self._discriminator.trainable_variables))
 
     # make generator loss
-    with tf.GradientTape() as gen_tape:
-      gen_samples = [
-        self._generator(batch_inputs) for _ in range(num_samples_per_input)]
-      grid_cell_reg_dist = grid_cell_regularizer_dist(tf.stack(gen_samples, axis=0),
-                                                      batch_targets)
-      gen_sequences = [tf.concat([batch_inputs, x], axis=1) for x in gen_samples] # from here on numpys as tf tensors
-      # Excpect error in pseudocode:
-      #  gen_disc_loss = loss_hinge_gen(tf.concat(gen_sequences, axis=0))
-      # changed to call discriminator on gen_sequence and caluculate loss on this output
-      disc_output = [self._discriminator(x) for x in gen_sequences]
-      gen_disc_loss_dist = loss_hinge_gen_dist(tf.concat(disc_output, axis=0))
-      gen_loss = gen_disc_loss_dist + 20.0 * grid_cell_reg_dist
-      tf.print("gen_loss", gen_loss)
-      with writer.as_default():
-        tf.summary.scalar('Gen loss', data=gen_loss, step = 0)
-    gradients_of_generator = gen_tape.gradient(gen_loss, self._generator.trainable_variables)
-    self._gen_op.apply_gradients(zip(gradients_of_generator, self._generator.trainable_variables))
+    for _ in range(2):
+      with tf.GradientTape() as gen_tape:
+        gen_samples = [
+          self._generator(batch_inputs) for _ in range(num_samples_per_input)]
+        grid_cell_reg_dist = grid_cell_regularizer_dist(tf.stack(gen_samples, axis=0),
+                                                        batch_targets)
+        gen_sequences = [tf.concat([batch_inputs, x], axis=1) for x in gen_samples] # from here on numpys as tf tensors
+        # Excpect error in pseudocode:
+        #  gen_disc_loss = loss_hinge_gen(tf.concat(gen_sequences, axis=0))
+        # changed to call discriminator on gen_sequence and caluculate loss on this output
+        disc_output = [self._discriminator(x) for x in gen_sequences]
+        gen_disc_loss_dist = loss_hinge_gen_dist(tf.concat(disc_output, axis=0))
+        gen_loss = gen_disc_loss_dist + 20.0 * grid_cell_reg_dist
+        tf.print("gen_loss", gen_loss)
+        with writer.as_default():
+          tf.summary.scalar('Gen loss', data=gen_loss, step = tf.cast(step, tf.int64))
+      gradients_of_generator = gen_tape.gradient(gen_loss, self._generator.trainable_variables)
+      self._gen_op.apply_gradients(zip(gradients_of_generator, self._generator.trainable_variables))
 
   def eval(self, frames, idx):
       print("eval index", idx)
@@ -187,15 +190,15 @@ class DGMR():
 # return disc_loss_dist
 dataset = reading_data.read_TFR(base_directory, batch_size=BATCH_SIZE)
 dataset = mirrored_strategy.experimental_distribute_dataset(dataset)
-
 test_set =  reading_data.read_TFR_test(base_directory, batch_size=1, window_shift=40)
 
 stamp = datetime.now().strftime("%m%d-%H%M")
 logdir = log_dir + "/func/%s" % stamp + "B" + str(BATCH_SIZE)
 writer = tf.summary.create_file_writer(logdir)
+
 #tf.profiler.experimental.start(logdir)
-#tf.summary.trace_on(graph=True)
 #tf.summary.trace_on(graph=False)
+
 with mirrored_strategy.scope():
   model = DGMR(epochs=epochs)
   model.run(train_dataset=dataset, test_dataset = test_set)

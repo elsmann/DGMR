@@ -16,11 +16,14 @@ feature_description = {
 
 # todo: add normalization
 def _parse_function(example_proto):
-    example = tf.io.parse_single_example(example_proto, feature_description)
-    example['image'] = tf.io.parse_tensor(example['image'], tf.float32, name=None)
+    try:
+        example = tf.io.parse_single_example(example_proto, feature_description)
+        example['image'] = tf.io.parse_tensor(example['image'], tf.float32, name=None)
 
-    return example
+        return example
 
+    except tf.errors.InvalidArgumentError:
+        raise
 
 def only_image(image_dataset):
     return image_dataset['image']
@@ -66,20 +69,26 @@ def read_TFR(path, year=None, batch_size=32, window_size=22, window_shift=1):
     else:
         tfr_dir = pathlib.Path(path) / str(year)
         pattern = str(tfr_dir) + '/*/*.tfrecords'
-    print(pattern)
+
     dataset = tf.data.TFRecordDataset(tf.data.Dataset.list_files(pattern, seed=seed))
     options = tf.data.Options()
     options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.FILE
     dataset = dataset.with_options(options)
+
+    ## dataset = shards.interleave(tf.data.TFRecordDataset)
     dataset = dataset.map(_parse_function, num_parallel_calls=tf.data.AUTOTUNE)
     dataset = dataset.window(size=window_size, shift=window_shift)
+
     filter_function = functools.partial(filter_windows, expected_len=window_size)
     dataset = dataset.filter(filter_function)
+
     dataset = dataset.map(only_image, num_parallel_calls=tf.data.AUTOTUNE)
     dataset = dataset.flat_map(lambda window: window.batch(window_size))
-    dataset = dataset.shuffle(buffer_size=32)  # TODO chnage
+
+    dataset = dataset.shuffle(buffer_size=1000)
     dataset = dataset.batch(batch_size)
     dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+    dataset = dataset.apply(tf.data.experimental.ignore_errors())
 
     return dataset
 
