@@ -3,7 +3,7 @@
 import functools
 import tensorflow as tf
 import sonnet as snt
-from DGMR import discriminator
+import discriminator
 import latent_stack
 import layers
 
@@ -106,7 +106,7 @@ class ConditioningStack(snt.Module):
 
     # Return a stack of conditioning representations of size (64x64x48, 32x32x96,
     # 16x16x192 and 8x8x384.) last dimension times 2
-    print(init_state_1, init_state_2, init_state_3, init_state_4)
+    #print("inital states", init_state_1, init_state_2, init_state_3, init_state_4)
     return init_state_1, init_state_2, init_state_3, init_state_4
 
   def _mixing_layer(self, inputs, conv_block):
@@ -151,14 +151,12 @@ class Sampler(snt.Module):
 
   def __call__(self, initial_states, resolution):
     # intial states are float64 for some reasom
-    print("resolution", resolution)
 
     init_state_1, init_state_2, init_state_3, init_state_4 = initial_states
     batch_size = init_state_1.shape.as_list()[0]
 
     # Latent conditioning stack.
     z = self._latent_stack(batch_size, resolution)
-    print("z", z)
     hs = [z] * self._num_predictions
 
     # Layer 4 (bottom-most).

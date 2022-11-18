@@ -76,13 +76,9 @@ def prepare_eth_h5_file(file, upper_row=300, lowest_row=556, left_column=241, ri
     f.close()
     image = image[upper_row:lowest_row, left_column:right_column]
      # out of image == 255
-     # changed from NaN to 0
-    image = np.where(image == 255, 0.0, image * 0.062992)
+    image = np.where(image == 255, np.NaN, image * 0.062992)
     # missing value == 0 TODO check if this needs to stay 0
-    image = np.where(image == 0, -1.0, image)
-    if (np.isnan(image).any()):
-        print(file, "contains nan values in ETH")
-
+    image = np.where(image == 0, np.NaN, image)
     #print(image_sum)
     return image
 
@@ -96,10 +92,6 @@ def prepare_radar_h5_file(file, upper_row=300, lowest_row=556, left_column=241, 
     image = np.where( image == 65535, np.NaN, image / 100.0 )
 
     image_sum = np.sum(image)
-
-    if (np.isnan(image).any()):
-        print(file, "contains nan values in radar")
-
     #print(image_sum)
     return image, image_sum
 
@@ -144,33 +136,25 @@ def write_day_TRfile(df, file_path):
                 image_eth = prepare_eth_h5_file(row['file_eth_observed'])
                 example_message = image_example(image_radar=image_radar, image_eth=image_eth,
                                                 image_sum_radar=image_sum_radar,
-                                                #status_radar=row['file_radar_okay'], # 1
-                                                #status_both=row['both_files_okay'], # 1
-                                                status_radar=1,  # 1
-                                                status_both=1,
+                                                status_radar=row['file_radar_okay'], # 1
+                                                status_both=row['both_files_okay'], # 1
                                                 date=row['date'].encode())
 
             elif bool(row['file_radar_okay']):
-                print(row['date'], "has invalid ETH data")
-                empty_image = np.full([256, 256], 0, dtype=np.float32)
+                empty_image = np.full([1, 1], 0)
                 image_radar, image_sum_radar = prepare_radar_h5_file(row['file_radar_observed'])
                 example_message = image_example(image_radar=image_radar, image_eth=empty_image,
                                                 image_sum_radar=image_sum_radar,
-                                                #status_radar=row['file_radar_okay'], # 1
-                                                #status_both=row['both_files_okay'], # 0
-                                                status_radar=1,  # 1
-                                                status_both=0,
+                                                status_radar=row['file_radar_okay'], # 1
+                                                status_both=row['both_files_okay'], # 0
                                                 date=row['date'].encode())
 
             else:
-                print(row['date'], "has invalid radar data ")
-                empty_image = np.full([256,256],0, dtype=np.float32)
+                empty_image = np.full([1,1],0)
                 example_message = image_example(image_radar=empty_image, image_eth=empty_image,
                                                 image_sum_radar=0.0,
-                                                #status_radar=row['file_radar_okay'],  # 0
-                                                #status_both=row['both_files_okay'],  # 0
-                                                status_radar=0,  # 0
-                                                status_both=0,  # 0
+                                                status_radar=row['file_radar_okay'],  # 0
+                                                status_both=row['both_files_okay'],  # 0
                                                 date=row['date'].encode())
             writer.write(example_message.SerializeToString())
 
@@ -209,12 +193,13 @@ def create_tfrecord_files(start,end):
         print(pd.isna(merged_df['file_eth_observed']).sum(), "eth files not found")
         merged_df['file_radar_okay'] = merged_df['file_radar_observed'].apply(check_radar_h5_file)
         merged_df['file_eth_okay'] = merged_df['file_eth_observed'].apply(check_eth_h5_file)
-        print((merged_df['file_radar_okay'] == 0).sum(), "radar files not valid")
-        print((merged_df['file_eth_okay'] == 0).sum(), "eth files not valid")
+        print(pd.isna(merged_df['file_radar_okay']).sum(), "radar files not valid")
+        print(pd.isna(merged_df['file_eth_okay']).sum(), "eth files not valid")
         merged_df['both_files_okay'] =  merged_df['file_radar_okay'] * merged_df['file_eth_okay']
         TFfile_path = out_dir / "{y}/{m}/".format(y=year,m=month)
         TFfile_path.mkdir(parents=True, exist_ok=True)
         shard_name = TFfile_path / "Joined_RAD_NL25_ETH_NA_{y}{m}{d}.tfrecords".format(y=year,m=month,d=day)
+        print(merged_df.head())
         write_day_TRfile(merged_df, str(shard_name))
         current_date = following_date
 

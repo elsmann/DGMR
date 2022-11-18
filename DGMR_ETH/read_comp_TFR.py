@@ -2,6 +2,8 @@ import pathlib
 import tensorflow as tf
 import functools
 import random
+import h5py
+import numpy as np
 
 seed = 17
 tf.random.set_seed(seed)
@@ -15,12 +17,56 @@ feature_description = {
     'date': tf.io.FixedLenFeature([], tf.string, default_value=''),
 }
 
+def prepare_eth_h5_file(file, upper_row=300, lowest_row=556, left_column=241, right_column=497 ):
+    f = h5py.File(file, 'r')
+    image = f['image1']['image_data']
+    image = np.asarray(image, dtype=np.float32)
+    f.close()
+    image = image[upper_row:lowest_row, left_column:right_column]
+     # out of image == 255
+     # changed from NaN to 0
+    image = np.where(image == 255, 0.0, image * 0.062992)
+    # missing value == 0 TODO check if this needs to stay 0
+    image = np.where(image == 0, -1.0, image)
+    if (np.isnan(image).any()):
+        print(file, "contains nan values in ETH")
+
+    #print(image_sum)
+    return image
+
+
+def prepare_radar_h5_file(file, upper_row=300, lowest_row=556, left_column=241, right_column=497 ):
+    f = h5py.File(file, 'r')
+    image = f['image1']['image_data']
+    image = np.asarray(image, dtype=np.float32)
+    f.close()
+    image = image[upper_row:lowest_row, left_column:right_column]
+    image = np.where( image == 65535, np.NaN, image / 100.0 )
+
+    image_sum = np.sum(image)
+
+    if (np.isnan(image).any()):
+        print(file, "contains nan values in radar")
+
+    #print(image_sum)
+    return image, image_sum
 
 # todo: add normalization
 def _parse_function(example_proto):
     example = tf.io.parse_single_example(example_proto, feature_description)
-    example['image_radar'] = tf.io.parse_tensor(example['image_radar'], tf.float32, name=None)
-    example['image_eth'] = tf.io.parse_tensor(example['image_eth'], tf.float32, name=None)
+    return example
+    if example['exists_both'] == 1:
+        pr = example['image_radar'].numpy().decode("utf-8")
+        example['image_radar'] = prepare_radar_h5_file(pr)
+       # example['image_eth'] = prepare_radar_h5_file(example['image_eth'].numpy().decode("utf-8"))
+    # if there is no valid eth image
+    elif example['exists_radar'] == 1:
+        example['image_radar'] = prepare_radar_h5_file(example['image_radar'].numpy().decode("utf-8"))
+        example['image_eth'] = np.full([1, 1], 0, dtype=np.float32)
+    # if there are no valid radar and eth images
+    else:
+        example['image_radar'] = np.full([1, 1], 0, dtype=np.float32)
+        example['image_eth'] = np.full([1, 1], 0, dtype=np.float32)
 
     return example
 
@@ -126,6 +172,8 @@ def check_TFR(path, year=None, batch_size=32, window_size=22, window_shift=1):
     dataset = dataset.with_options(options)
     ## dataset = shards.interleave(tf.data.TFRecordDataset)
     dataset = dataset.map(_parse_function, num_parallel_calls=tf.data.AUTOTUNE)
+    return dataset
+
     dataset = dataset.window(size=window_size, shift=window_shift)
     filter_function = functools.partial(filter_windows, expected_len=window_size,  ISS_value=0)
     dataset = dataset.filter(filter_function)
@@ -139,11 +187,25 @@ def check_TFR(path, year=None, batch_size=32, window_size=22, window_shift=1):
 
 
 y = check_TFR("/Users/frederikesmac/MA/Data/TFR_ETH", batch_size=1)
+print("HHHHYYY")
 print(y)
+
 for i in y:
     print(i)
+    print(i['image_radar'])
+    print(i['image_radar'].decode("utf-8"))
+
+    print(i['image_radar'].numpy().decode("utf-8"))
+    print(prepare_radar_h5_file(i['image_radar'].numpy().decode("utf-8")))
     print("-----------------")
+    break
 
     #print(i['date'])
     #break
 
+
+
+# dont turn into arrays yet
+# first filter
+# then use parse again
+# doesn't matter too mich

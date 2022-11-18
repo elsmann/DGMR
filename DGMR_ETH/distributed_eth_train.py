@@ -16,6 +16,7 @@ import reading_ETH_data
 import sys
 from datetime import datetime
 import numpy as np
+import os
 
 
 #os.environ['TF_GPU_THREAD_MODE'] = 'gpu_private'
@@ -38,10 +39,12 @@ else:
   mirrored_strategy = tf.distribute.MirroredStrategy()
   print("Running with graph execution")
 
+
 num_samples_per_input = 2 # default 6
 epochs = 1
-BATCH_SIZE = 4
-steps_per_epoch = 200
+BATCH_SIZE = 1
+steps_per_epoch = 80000
+eval_step = 1
 year = None
 
 ############
@@ -101,8 +104,7 @@ class DGMR():
     self._gen_op = generator_optimizer
     self._disc_op = discriminator_optimizer
     self._epochs = epochs
-    print("in scope")
-    print(mirrored_strategy.extended.variable_created_in_scope(self._generator._sampler._latent_stack._mini_atten_block._gamma))
+    print("In scope: ", mirrored_strategy.extended.variable_created_in_scope(self._generator._sampler._latent_stack._mini_atten_block._gamma))
 
   @tf.function
   def distributed_train_step(self, dataset_inputs):
@@ -112,58 +114,68 @@ class DGMR():
      #                      axis=None)
 
 # put tf function here?
-  def run(self, train_dataset, test_dataset ):
-
+  def run(self, train_dataset, test_dataset, manager=None):
     test_iterator = iter(test_dataset)
+    _ = next(test_iterator)
+    _ = next(test_iterator)
+    _ = next(test_iterator)
+    image_1 = next(test_iterator)
+    _ = next(test_iterator)
+    image_2 = next(test_iterator)
+    image_3 = next(test_iterator)
+    image_4 = next(test_iterator)
     idx = 0
 
     for epoch in range(self._epochs):
       dist_iterator = iter(train_dataset)
-      print("Epoch:", epoch)
       tf.print("Epoch:", epoch)
 
       for step in tf.range(steps_per_epoch):
         tf.print(step, "step")
-        print("Step:", step)
+        print("STEP", step)
         data = dist_iterator.get_next_as_optional()
+        print("-----------------------------------")
         if not data.has_value():
           break
         self.distributed_train_step(data.get_value())
-        if step %50 == 0:
+
+        if step % 50 == 0:
+            save_path = manager.save()
+            tf.print("Saved checkpoint for step {}: {}".format(int(step), save_path))
+        if step % eval_step == 0:
           self.eval(next(test_iterator), idx)
+          #self.eval_2(image_1, image_2, image_3, image_4, idx)
           idx+=1
-        if step == 500:
-          break
 
 
   def train_step(self, frames):
     frames = tf.expand_dims(frames, -1)
     radar_frames = frames[0]
-    print("Dimension of frames", radar_frames.shape)
-
     eth_frames = frames[1]
     radar_batch_inputs, batch_targets = tf.split(radar_frames, [4, 18], axis=1)
     eth_batch_inputs, _ = tf.split(eth_frames, [4, 18], axis=1)
-    # TODO now it is trained twice on the same data batch, is that correct?
+  # TODO now it is trained twice on the same data batch, is that correct?
+    # calculate samples and targets for discriminator steps
+    # Concatenate the real and generated samples along the batch dimension
+    batch_predictions = self._generator(radar_batch_inputs, eth_batch_inputs)
+    gen_sequence = tf.concat([radar_batch_inputs, batch_predictions], axis=1)
+    real_sequence = tf.concat([radar_batch_inputs, batch_targets], axis=1)
+    concat_inputs = tf.concat([real_sequence, gen_sequence], axis=0)
+    print("concat inputs", concat_inputs)
+    print(np.nansum(concat_inputs))
     for _ in range(1):
-      # calculate samples and targets for discriminator steps
-      # Concatenate the real and generated samples along the batch dimension
-      batch_predictions = self._generator(radar_batch_inputs, eth_batch_inputs)
-      gen_sequence = tf.concat([radar_batch_inputs, batch_predictions], axis=1)
-      real_sequence = tf.concat([radar_batch_inputs, batch_targets], axis=1)
-      concat_inputs = tf.concat([real_sequence, gen_sequence], axis=0)
-      for _ in range(2):
-        with tf.GradientTape() as disc_tape:
-          concat_outputs = self._discriminator(concat_inputs)
-          # And split back to scores for real and generated samples
-          score_real, score_generated = tf.split(concat_outputs, 2, axis=0)
-          disc_loss_dist = loss_hinge_disc_dist(score_generated, score_real)
-          with writer.as_default():
-            tf.summary.scalar('disc loss', data=disc_loss_dist, step =0)
-          print("DISC loss:", disc_loss_dist)
-          tf.print("disc_loss", disc_loss_dist)
-        gradients_of_discriminator = disc_tape.gradient(disc_loss_dist, self._discriminator.trainable_variables)
-        self._disc_op.apply_gradients(zip(gradients_of_discriminator, self._discriminator.trainable_variables))
+      with tf.GradientTape() as disc_tape:
+        concat_outputs = self._discriminator(concat_inputs)
+        print("CONCAT OUTPUTS", concat_outputs)
+        # And split back to scores for real and generated samples
+        score_real, score_generated = tf.split(concat_outputs, 2, axis=0)
+        disc_loss_dist = loss_hinge_disc_dist(score_generated, score_real)
+        with writer.as_default():
+          tf.summary.scalar('disc loss', data=disc_loss_dist, step =0)
+        print("DISC loss:", disc_loss_dist)
+        tf.print("disc_loss", disc_loss_dist)
+      gradients_of_discriminator = disc_tape.gradient(disc_loss_dist, self._discriminator.trainable_variables)
+      self._disc_op.apply_gradients(zip(gradients_of_discriminator, self._discriminator.trainable_variables))
 
     # make generator loss
     with tf.GradientTape() as gen_tape:
@@ -172,11 +184,15 @@ class DGMR():
       grid_cell_reg_dist = grid_cell_regularizer_dist(tf.stack(gen_samples, axis=0),
                                                       batch_targets)
       gen_sequences = [tf.concat([radar_batch_inputs, x], axis=1) for x in gen_samples]# from here on numpys as tf tensors
+      gen_real_sequences = [tf.concat([x, real_sequence], axis=0) for x in gen_sequences]
+
       # Excpect error in pseudocode:
       #  gen_disc_loss = loss_hinge_gen(tf.concat(gen_sequences, axis=0))
       # changed to call discriminator on gen_sequence and caluculate loss on this output
-      disc_output = [self._discriminator(x) for x in gen_sequences]
-      gen_disc_loss_dist = loss_hinge_gen_dist(tf.concat(disc_output, axis=0))
+      disc_output = [self._discriminator(x) for x in gen_real_sequences]
+      gen_outputs = [tf.split(i, 2, axis=0)[0] for i in disc_output]
+
+      gen_disc_loss_dist = loss_hinge_gen_dist(tf.concat(gen_outputs, axis=0))
       gen_loss = gen_disc_loss_dist + 20.0 * grid_cell_reg_dist
       print("GEN_loss", gen_loss)
       tf.print("gen_loss", gen_loss)
@@ -192,7 +208,6 @@ class DGMR():
       eth_frames = frames[1]
       radar_inputs, targets = tf.split(radar_frames, [4, 18], axis=1)
       eth_inputs, _ = tf.split(eth_frames, [4, 18], axis=1)
-      inputs, targets = tf.split(frames, [4, 18], axis=1)
       predictions=  self._generator(radar_inputs, eth_inputs)
       gen_sequence = tf.concat([radar_inputs, predictions], axis=1)
       real_sequence = tf.concat([radar_inputs, targets], axis=1)
@@ -209,11 +224,11 @@ class DGMR():
 # return disc_loss_dist
 dataset = reading_ETH_data.read_TFR(base_directory, batch_size=BATCH_SIZE)
 dataset = mirrored_strategy.experimental_distribute_dataset(dataset)
-
+for i in dataset:
+  print(i)
+  print("--------------")
+  break
 test_set =  reading_ETH_data.read_TFR_test(base_directory, batch_size=1, window_shift=40)
-
-
-
 
 stamp = datetime.now().strftime("%m%d-%H%M")
 logdir = log_dir + "/func/%s" % stamp + "B" + str(BATCH_SIZE)
@@ -224,6 +239,25 @@ writer = tf.summary.create_file_writer(logdir)
 
 with mirrored_strategy.scope():
   model = DGMR(epochs=epochs)
+
+  checkpoint_dir = log_dir + '/training_checkpoints_ETH'
+  checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
+  checkpoint = tf.train.Checkpoint(
+    generator_optimizer=model._gen_op,
+    discriminator_optimizer=model._disc_op,
+    generator=model._generator,
+    discriminator=model._discriminator
+    # add iterator?
+  )
+  manager = tf.train.CheckpointManager(checkpoint, checkpoint_dir, max_to_keep=2)
+  checkpoint.restore(manager.latest_checkpoint)
+  if manager.latest_checkpoint:
+    tf.print("Restored from {}".format(manager.latest_checkpoint))
+  else:
+    tf.print("Initializing from scratch.")
+
+  model.run(train_dataset=dataset, test_dataset=test_set, manager=manager)
+
   model.run(train_dataset=dataset, test_dataset = test_set)
 
 #with writer.as_default():

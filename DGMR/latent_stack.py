@@ -26,7 +26,8 @@ class LatentCondStack(snt.Module):
     # TODO increase deviation from default 1 to 2 when predicting
     z = tf.random.normal([batch_size, h, w, 8])
 
-    # 3x3 convolution.
+
+      # 3x3 convolution.
     z = self._conv1(z)
 
     # Three L Blocks to increase the number of channels to 24, 48, 192.

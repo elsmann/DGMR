@@ -183,6 +183,7 @@ class SpatialDiscriminator(snt.Module):
 
     # Space-to-depth stacking from 128x128x1 to 64x64x4.
     frames = tf.nn.space_to_depth(frames, block_size=2)
+    print("framessssss", frames.shape)
 
     # Five residual D Blocks to halve the resolution of the image and double
     # the number of channels.
@@ -194,16 +195,22 @@ class SpatialDiscriminator(snt.Module):
 
     # One more D Block without downsampling or increase in number of channels.
     y = self._block6(y)
+    print("y", y.shape)
+
     # Sum-pool the representations and feed to spectrally normalized lin. layer.
     y = tf.reduce_sum(tf.nn.relu(y), axis=[1, 2])
     y = self._bn(y)
+    print("y2", y.shape)
     # TODO shouldn't this be spectrally normalized?
     output = self._ln(y)
+    print("y3", output.shape)
 
     # Take the sum across the t samples. Note: we apply the ReLU to
     # (1 - score_real) and (1 + score_generated) in the loss.
     output = tf.reshape(output, [b, n, 1])
+    print("output", output)
     output = tf.reduce_sum(output, keepdims=True, axis=1)
+    print("output2", output)
     return output
 
 
